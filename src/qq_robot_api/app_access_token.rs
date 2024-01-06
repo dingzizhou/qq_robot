@@ -44,7 +44,7 @@ pub async fn get_global_access_token() -> Result<String, Box<dyn std::error::Err
                 let res = get_app_access_token().await?;
                 let _ = GLOBAL_ACCESS_TOKEN.set(
                     AccessToken{
-                        token:res.access_token.to_string(),
+                        token:"QQBot ".to_string() + &res.access_token.to_string(),
                         update_time:now_time + chrono::Duration::seconds(res.expires_in.parse::<i64>().unwrap())
                 });
             }
@@ -55,10 +55,10 @@ pub async fn get_global_access_token() -> Result<String, Box<dyn std::error::Err
             let res = get_app_access_token().await?;
             let _ = GLOBAL_ACCESS_TOKEN.set(
                 AccessToken{
-                    token:res.access_token.to_string(),
+                    token:"QQBot ".to_string() + &res.access_token.to_string(),
                     update_time:now_time + chrono::Duration::seconds(res.expires_in.parse::<i64>().unwrap())
             });
-            Ok(res.access_token.to_string())
+            Ok("QQBot ".to_string() + &res.access_token.to_string())
         }
     }
 }
