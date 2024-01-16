@@ -8,11 +8,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
     request_client::init();
     println!("123");
 
-    // let res = qq_robot_api::app_access_token::get_global_access_token().await?;
-    // println!("{:?}",res);
-    // let _ = qq_robot_api::guilds::get_channels_list().await?;
-
-    // let _ = qq_robot_api::message::send_channel_message(Option::Some("test_send_null_param".to_string()),Option::None).await?;
+    let websocket1 = qq_robot_api::websocket_api::connect_to_wss();
+    // let websocket2 = qq_robot_api::websocket_api::connect_to_wss();
+    println!("456");
+    let res1 = tokio::join!(websocket1);
     Ok(())
 }
 
