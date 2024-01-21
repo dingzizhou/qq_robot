@@ -11,6 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
     let websocket1 = qq_robot_api::websocket_api::connect_to_wss();
     // let websocket2 = qq_robot_api::websocket_api::connect_to_wss();
     println!("456");
+    // let _ = qq_robot_api::websocket_api::WSS_CLOSE_FLAG.set(true);
     let res1 = tokio::join!(websocket1);
     Ok(())
 }
