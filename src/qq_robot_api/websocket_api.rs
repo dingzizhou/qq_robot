@@ -13,6 +13,7 @@ use std::sync::OnceLock;
 use crate::request_client;
 
 pub static WSS_CLOSE_FLAG:OnceLock<bool> = OnceLock::new();
+static ACK:OnceLock<u32> = OnceLock::new();
 
 #[derive(Deserialize,Debug)]
 struct WssUrl {
@@ -93,7 +94,7 @@ async fn get_wss_url() -> Result<String, Box<dyn std::error::Error>> {
 pub async fn connect_to_wss() -> Result<(), Box<dyn std::error::Error>>{
     let _ = WSS_CLOSE_FLAG.set(false);
     let wss_url = get_wss_url().await?;
-    println!("wss_url:{}",wss_url);
+    // println!("wss_url:{}",wss_url);
     let (mut ws_stream,_) = connect_async(&wss_url).await.expect("Fail to connect");
     let mut ready_event:Payload;
     loop {
@@ -128,22 +129,23 @@ pub async fn connect_to_wss() -> Result<(), Box<dyn std::error::Error>>{
         match res_object.op {
             // Dispatch 服务端进行消息推送
             0 => {
-                
+                update_ack(res_object.s);
             },
             1 => {
-
+                update_ack(res_object.s);
             },
             2 => {
-
+                update_ack(res_object.s);
             },
             // Resume 客户端回复链接
             6 => {
-
+                update_ack(res_object.s);
             },
             7 => {
-
+                update_ack(res_object.s);
             },
             9 => {
+                update_ack(res_object.s);
                 println!("InvalidSession");
             },
             // Hello 当客户端与网关建立 ws 连接之后，网关下发的第一条消息
@@ -164,11 +166,11 @@ pub async fn connect_to_wss() -> Result<(), Box<dyn std::error::Error>>{
                 println!("send identify");
                 ready_event = match ws_stream.next().await.expect("Cant fetch case count") {
                     Ok(value) => {
-                        println!("value = {:?}",value);
+                        // println!("value = {:?}",value);
                         serde_json::from_str(&value.to_string()).unwrap()
                     },
                     Err(err) => {
-                        println!("err = {:?}",err);
+                        // println!("err = {:?}",err);
                         Payload {
                             op:u8::MAX,
                             d:json!({}),
@@ -184,23 +186,28 @@ pub async fn connect_to_wss() -> Result<(), Box<dyn std::error::Error>>{
                     t:None,
                 };
                 let _ = ws_stream.send(Message::Text(serde_json::to_string(&ack_payload).unwrap())).await;
+                // let ack_res = ws_stream.next().await.expect("Cant fetch case count").unwrap();
+                // ack = serde_json::from_str(&ack_res.to_string()).unwrap();
             },
-            // 维持心跳
             _ => {
-                
+
             }
         }
         
     }
     
-    // let identify = Identify {
-    //     token: crate::qq_robot_api::app_access_token::get_global_access_token().await?,
-    //     intents: IntentsEnum::PUBLIC_GUILD_MESSAGES as i32,
-    //     shard: [0,1],
-    //     properties: HashMap::new(),
-    // };
-    // println!("{:?}",identify);
     println!("close ws_stream");
     ws_stream.close(None).await?;
     Ok(())
+}
+
+fn update_ack(ack:Option<u32>) {
+    match ack {
+        Some(s) => {
+            let _ = ACK.set(s);
+        },
+        None => {
+            
+        },
+    }
 }
