@@ -45,8 +45,10 @@ struct ReadyEventUser {
 
 #[derive(Deserialize,Debug,Serialize,Clone)]
 struct Payload {
-    op:u8,
-    d:serde_json::Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    op:Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    d:Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     s:Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -97,36 +99,29 @@ pub async fn connect_to_wss() -> Result<(), Box<dyn std::error::Error>>{
     // println!("wss_url:{}",wss_url);
     let (mut ws_stream,_) = connect_async(&wss_url).await.expect("Fail to connect");
     let mut ready_event:Payload;
+    let mut heartbeat_interval:HashMap<String,u32>;
     loop {
         println!("{:?}",WSS_CLOSE_FLAG.get().unwrap());
         if *WSS_CLOSE_FLAG.get().unwrap() {
             break;
         }
-        let res = match ws_stream.next().await.expect("Cant fetch case count") {
-            Ok(value) => value,
-            Err(err) => {
-                println!("err = {:?}",err);
-                Message::Text("err".to_string())
-            },
-        };
+        let res = ws_stream.next().await.expect("Cant fetch case count").unwrap_or_else(|err| {
+            println!("err = {:?}", err);
+            Message::Text("err".to_string())
+        });
         println!("res = {:?}",res);
-        let res_object:Payload = match serde_json::from_str(&res.to_string()){
-            Ok(value) => value,
-            Err(err) => {
-                println!("err = {:?}",err);
-                let err_payload = Payload{
-                    op:6,
-                    d:json!({}),
-                    s:None,
-                    t:None,
-                };
-                err_payload.clone()
-            }
-        };
+        let res_object:Payload = serde_json::from_str(&res.to_string()).unwrap_or_else(|err| {
+            println!("err = {:?}", err);
+            let err_payload = Payload {
+                op: None,
+                d: None,
+                s: None,
+                t: None,
+            };
+            err_payload.clone()
+        });
         // println!("res_object = {:?}",res_object);
-        let heartbeat_interval:HashMap<String,u32> = serde_json::from_value(res_object.d).unwrap();
-        // println!("heartbeat_interval = {:?}",heartbeat_interval.get("heartbeat_interval"));
-        match res_object.op {
+        match res_object.op.unwrap() {
             // Dispatch 服务端进行消息推送
             0 => {
                 update_ack(res_object.s);
@@ -150,6 +145,7 @@ pub async fn connect_to_wss() -> Result<(), Box<dyn std::error::Error>>{
             },
             // Hello 当客户端与网关建立 ws 连接之后，网关下发的第一条消息
             10 => {
+                heartbeat_interval = serde_json::from_value(res_object.d.into()).unwrap();
                 let identify = Identify {
                     token: crate::qq_robot_api::app_access_token::get_global_access_token().await?,
                     intents: 0 | IntentsEnum::PublicGuildMessages as i32,
@@ -157,8 +153,8 @@ pub async fn connect_to_wss() -> Result<(), Box<dyn std::error::Error>>{
                     properties: HashMap::new(),
                 };
                 let req_payload = Payload {
-                    op:2,
-                    d:json!(&identify),
+                    op:Some(2),
+                    d:Some(json!(&identify)),
                     s:None,
                     t:None,
                 };
@@ -169,19 +165,19 @@ pub async fn connect_to_wss() -> Result<(), Box<dyn std::error::Error>>{
                         // println!("value = {:?}",value);
                         serde_json::from_str(&value.to_string()).unwrap()
                     },
-                    Err(err) => {
+                    Err(_) => {
                         // println!("err = {:?}",err);
                         Payload {
-                            op:u8::MAX,
-                            d:json!({}),
+                            op:None,
+                            d:None,
                             s:None,
                             t:None,
                         }
                     },
                 };
                 let ack_payload = Payload {
-                    op:1,
-                    d:json!({}),
+                    op:Some(1),
+                    d:None,
                     s:None,
                     t:None,
                 };
