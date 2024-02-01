@@ -1,5 +1,5 @@
 use std::{collections::HashMap, thread};
-use std::sync::Arc;
+use std::sync::{Mutex, Arc};
 
 use futures_util::{stream::FusedStream, SinkExt, StreamExt, TryFutureExt};
 use serde_json::json;
@@ -77,6 +77,7 @@ enum OpcodeEnum {
 }
 
 pub struct WssStruct {
+    // wss_stream:Arc<Mutex<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
     wss_stream:WebSocketStream<MaybeTlsStream<TcpStream>>,
     ack:Option<u32>,
     heartbeat_interval:Option<HashMap<String,u64>>,
@@ -202,7 +203,7 @@ impl WssStruct {
         }
         
         // println!("close ws_stream");
-        // ws_stream.close(None).await?;
+        // ws_stream.close(None).await?
         Ok(())
     }
     
