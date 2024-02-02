@@ -77,8 +77,8 @@ enum OpcodeEnum {
 }
 
 pub struct WssStruct {
-    // wss_stream:Arc<Mutex<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
-    wss_stream:WebSocketStream<MaybeTlsStream<TcpStream>>,
+    wss_stream:Arc<Mutex<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
+    // wss_stream:WebSocketStream<MaybeTlsStream<TcpStream>>,
     ack:Option<u32>,
     heartbeat_interval:Option<HashMap<String,u64>>,
     ready_event:Option<Payload>,
@@ -95,7 +95,7 @@ pub async fn init_global_wss_stream() -> Result<WssStruct, Box<dyn std::error::E
                                                                 .await?;
     let ( wss_stream , _ ) = connect_async(res.url).await.unwrap();
     let wss_struct = WssStruct{
-        wss_stream,
+        wss_stream:Arc::new(Mutex::new(wss_stream)),
         ack: Some(0),
         heartbeat_interval: None,
         ready_event: None,
@@ -107,7 +107,7 @@ impl WssStruct {
     
     pub async fn listen_wss(&mut self) -> Result<(), Box<dyn std::error::Error>>{
         loop {
-            if self.wss_stream.is_terminated(){
+            if self.wss_stream.lock().unwrap().is_terminated(){
                 break;
             }
             // println!("{:?}",WSS_CLOSE_FLAG.get().unwrap());
@@ -115,7 +115,7 @@ impl WssStruct {
             //     break;
             // }
             // let t = self.wss_stream.poll_ready();
-            let res = self.wss_stream.next().await.expect("Cant fetch case count").unwrap_or_else(|err| {
+            let res = self.wss_stream.lock().unwrap().next().await.expect("Cant fetch case count").unwrap_or_else(|err| {
                 println!("err = {:?}", err);
                 Message::Text("err".to_string())
             });
@@ -166,9 +166,9 @@ impl WssStruct {
                         s:None,
                         t:None,
                     };
-                    let _ = self.wss_stream.send(Message::Text(serde_json::to_string(&req_payload).unwrap())).await;
+                    let _ = self.wss_stream.lock().unwrap().send(Message::Text(serde_json::to_string(&req_payload).unwrap())).await;
                     println!("send identify");
-                    self.ready_event = match self.wss_stream.next().await.expect("Cant fetch case count") {
+                    self.ready_event = match self.wss_stream.lock().unwrap().next().await.expect("Cant fetch case count") {
                         Ok(value) => {
                             // println!("value = {:?}",value);
                             serde_json::from_str(&value.to_string()).unwrap()
@@ -189,11 +189,13 @@ impl WssStruct {
                         s:None,
                         t:None,
                     };
-                    let _ = self.wss_stream.send(Message::Text(serde_json::to_string(&ack_payload).unwrap())).await;
+                    let _ = self.wss_stream.lock().unwrap().send(Message::Text(serde_json::to_string(&ack_payload).unwrap())).await;
                     // let ack_res = ws_stream.next().await.expect("Cant fetch case count").unwrap();   
                     // ack = serde_json::from_str(&ack_res.to_string()).unwrap();
                     println!("11111");
-                    // tokio::spawn(self.send_heartbeat());
+                    // tokio::spawn(async {
+                    //     let ms = std::time::Duration::from_millis(*self.heartbeat_interval.unwrap().get("heartbeat_interval").unwrap());
+                    // });
                 },
                 _ => {
     
@@ -207,24 +209,24 @@ impl WssStruct {
         Ok(())
     }
     
-    async fn send_heartbeat(&mut self){
-        println!("start send_heartbeat function");
-        let heartbeat_interval = self.heartbeat_interval.as_mut().unwrap().get("heartbeat_interval").unwrap();
-        let ms = std::time::Duration::from_millis(*heartbeat_interval);
-        loop {
-            thread::sleep(ms);
-            println!("send heartbeat");
-            if self.wss_stream.is_terminated(){
-                break;
-            }
-            let ack_payload = Payload {
-                op:Some(1),
-                d:Some(json!(self.ack)),
-                s:None,
-                t:None,
-            };
-            let _ = self.wss_stream.send(Message::Text(serde_json::to_string(&ack_payload).unwrap()));
-        }
-    }
+}
 
+async fn send_heartbeat(ms:u64,ack:u32,mut wss_stream:WebSocketStream<MaybeTlsStream<TcpStream>>){
+    println!("start send_heartbeat function");
+    // let heartbeat_interval = self.heartbeat_interval.clone().unwrap();
+    let ms = std::time::Duration::from_millis(ms);
+    loop {
+        thread::sleep(ms);
+        println!("send heartbeat");
+        if wss_stream.is_terminated(){
+            break;
+        }
+        let ack_payload = Payload {
+            op:Some(1),
+            d:Some(json!(ack)),
+            s:None,
+            t:None,
+        };
+        let _ = wss_stream.send(Message::Text(serde_json::to_string(&ack_payload).unwrap()));
+    }
 }
