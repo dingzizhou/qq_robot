@@ -1,7 +1,14 @@
 use std::{collections::HashMap, thread};
-use std::sync::{Mutex, Arc};
+use std::sync::{Arc, OnceLock};
 
-use futures_util::{stream::FusedStream, SinkExt, StreamExt, TryFutureExt};
+use futures_util::stream::{SplitSink, SplitStream};
+use futures_util::{
+    lock::Mutex,
+    StreamExt,
+    sink::{Sink, SinkExt,},
+    stream::{FusedStream, Stream},
+};
+// use futures_util::{stream::FusedStream, SinkExt, StreamExt, Sink};
 use serde_json::json;
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
@@ -77,14 +84,17 @@ enum OpcodeEnum {
 }
 
 pub struct WssStruct {
-    wss_stream:Arc<Mutex<WebSocketStream<MaybeTlsStream<TcpStream>>>>,
     // wss_stream:WebSocketStream<MaybeTlsStream<TcpStream>>,
-    ack:Option<u32>,
-    heartbeat_interval:Option<HashMap<String,u64>>,
-    ready_event:Option<Payload>,
+    read_stream:Arc<Mutex<SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>>>,
+    write_stream:Arc<Mutex<SplitSink<WebSocketStream<MaybeTlsStream<TcpStream>>,Message>>>,
+    ack:Arc<Mutex<Option<u32>>>,
+    heartbeat_interval:Arc<Mutex<Option<HashMap<String,u64>>>>,
+    ready_event:Arc<Mutex<Option<Payload>>>,
 }
 
-pub async fn init_global_wss_stream() -> Result<WssStruct, Box<dyn std::error::Error>> {
+pub static GLOBAL_WSS_STRUCT:OnceLock<WssStruct> = OnceLock::new();
+
+pub async fn init_global_wss_stream() -> Result<bool, Box<dyn std::error::Error>> {
     let token = crate::qq_robot_api::app_access_token::get_global_access_token().await?;
     let res = request_client::REQUEST_CLIENT.get().unwrap().get("https://sandbox.api.sgroup.qq.com/gateway")
                                                                 .header("Authorization",token)
@@ -94,139 +104,168 @@ pub async fn init_global_wss_stream() -> Result<WssStruct, Box<dyn std::error::E
                                                                 .json::<WssUrl>()
                                                                 .await?;
     let ( wss_stream , _ ) = connect_async(res.url).await.unwrap();
+    let (write_stream, read_stream) = wss_stream.split();
+    // let res1 = write.send(Message::Text(serde_json::to_string("1").unwrap()));
+    // let res2 = read.next();
+    // let (stdin_tx, stdin_rx) = futures_channel::mpsc::unbounded();
+    
     let wss_struct = WssStruct{
-        wss_stream:Arc::new(Mutex::new(wss_stream)),
-        ack: Some(0),
-        heartbeat_interval: None,
-        ready_event: None,
+        read_stream:Arc::new(Mutex::new(read_stream)),
+        write_stream:Arc::new(Mutex::new(write_stream)),
+        ack: Arc::new(Mutex::new(Some(0))),
+        heartbeat_interval: Arc::new(Mutex::new(None)),
+        ready_event: Arc::new(Mutex::new(None)),
     };
-    Ok(wss_struct)
+    let _ = GLOBAL_WSS_STRUCT.set(wss_struct);
+    // let send_payload = Payload{
+    //     op: todo!(),
+    //     d: todo!(),
+    //     s: todo!(),
+    //     t: todo!(),
+    // };
+    // write_stream.send(item)
+    Ok(true)
 }
 
-impl WssStruct {
-    
-    pub async fn listen_wss(&mut self) -> Result<(), Box<dyn std::error::Error>>{
-        loop {
-            if self.wss_stream.lock().unwrap().is_terminated(){
-                break;
-            }
-            // println!("{:?}",WSS_CLOSE_FLAG.get().unwrap());
-            // if self.wss_close_flag {
-            //     break;
-            // }
-            // let t = self.wss_stream.poll_ready();
-            let res = self.wss_stream.lock().unwrap().next().await.expect("Cant fetch case count").unwrap_or_else(|err| {
-                println!("err = {:?}", err);
-                Message::Text("err".to_string())
-            });
-            println!("res = {:?}",res);
-            let res_object:Payload = serde_json::from_str(&res.to_string()).unwrap_or_else(|err| {
-                println!("err = {:?}", err);
-                let err_payload = Payload {
-                    op: Some(6),
-                    d: None,
-                    s: None,
-                    t: None,
-                };
-                err_payload.clone()
-            });
-            // println!("res_object = {:?}",res_object);
-            // self.ack = Some(res_object.s.unwrap());
-            self.ack = res_object.s;
-            if res_object.op.is_none() { continue };
-            match res_object.op.unwrap() {
-                // Dispatch 服务端进行消息推送
-                0 => {
-                },
-                1 => {
-                },
-                2 => {
-                },
-                // Resume 客户端回复链接
-                6 => {
+// pub async fn listen_wss() -> Result<(), Box<dyn std::error::Error>> {
+//     Ok(())
+// }
 
-                },
-                7 => {
-                },
-                9 => {
-                    println!("InvalidSession");
-                },
-                // Hello 当客户端与网关建立 ws 连接之后，网关下发的第一条消息
-                10 => {
-                    self.heartbeat_interval = serde_json::from_value(res_object.d.into()).unwrap();
-                    let identify = Identify {
-                        token: crate::qq_robot_api::app_access_token::get_global_access_token().await?,
-                        intents: 0 | IntentsEnum::PublicGuildMessages as i32,
-                        shard: [0,1],
-                        properties: HashMap::new(),
-                    };
-                    let req_payload = Payload {
-                        op:Some(2),
-                        d:Some(json!(&identify)),
-                        s:None,
-                        t:None,
-                    };
-                    let _ = self.wss_stream.lock().unwrap().send(Message::Text(serde_json::to_string(&req_payload).unwrap())).await;
-                    println!("send identify");
-                    self.ready_event = match self.wss_stream.lock().unwrap().next().await.expect("Cant fetch case count") {
-                        Ok(value) => {
-                            // println!("value = {:?}",value);
-                            serde_json::from_str(&value.to_string()).unwrap()
-                        },
-                        Err(_) => {
-                            // println!("err = {:?}",err);
-                            Some(Payload {
-                                op:None,
-                                d:None,
-                                s:None,
-                                t:None,
-                            })
-                        },
-                    };
-                    let ack_payload = Payload {
-                        op:Some(1),
-                        d:None,
-                        s:None,
-                        t:None,
-                    };
-                    let _ = self.wss_stream.lock().unwrap().send(Message::Text(serde_json::to_string(&ack_payload).unwrap())).await;
-                    // let ack_res = ws_stream.next().await.expect("Cant fetch case count").unwrap();   
-                    // ack = serde_json::from_str(&ack_res.to_string()).unwrap();
-                    println!("11111");
-                    // tokio::spawn(async {
-                    //     let ms = std::time::Duration::from_millis(*self.heartbeat_interval.unwrap().get("heartbeat_interval").unwrap());
-                    // });
-                },
-                _ => {
-    
+pub async fn listen_wss() -> Result<(), Box<dyn std::error::Error>>{
+    let wss_struct = GLOBAL_WSS_STRUCT.get().unwrap().clone();
+    loop {
+        let res = wss_struct.read_stream.lock().await.next().await.expect("Cant fetch case count").unwrap_or_else(|err| {
+            println!("err = {:?}", err);
+            Message::Text("err".to_string())
+        });
+        println!("res = {:?}",res);
+        let res_object:Payload = serde_json::from_str(&res.to_string()).unwrap_or_else(|err| {
+            println!("err = {:?}", err);
+            let err_payload = Payload {
+                op: Some(6),
+                d: None,
+                s: None,
+                t: None,
+            };
+            err_payload.clone()
+        });
+        if res_object.s.is_some() {
+            *wss_struct.ack.lock().await = res_object.s;
+        }
+        if res_object.op.is_none() { continue };
+        match res_object.op.unwrap() {
+            // Dispatch 服务端进行消息推送
+            0 => {
+                
+            },
+            // Heartbeat 客户端或服务端发送心跳
+            1 => {
+            },
+            // Reconnect 	服务端通知客户端重新连接
+            7 => {
+            },
+            // Invalid Session
+            // 当 identify 或 resume 的时候，如果参数有错，服务端会返回该消息
+            9 => {
+                println!("InvalidSession");
+            },
+            // Hello
+            // 当客户端与网关建立 ws 连接之后，网关下发的第一条消息
+            10 => {
+                *wss_struct.heartbeat_interval.lock().await = serde_json::from_value(res_object.d.into()).unwrap();
+                let identify = Identify {
+                    token: crate::qq_robot_api::app_access_token::get_global_access_token().await?,
+                    intents: 0 | IntentsEnum::PublicGuildMessages as i32,
+                    shard: [0,1],
+                    properties: HashMap::new(),
+                };
+                let req_payload = Payload {
+                    op:Some(2),
+                    d:Some(json!(&identify)),
+                    s:None,
+                    t:None,
+                };
+                {
+                    let _ = wss_struct.write_stream.lock().await.send(Message::Text(serde_json::to_string(&req_payload).unwrap())).await;
                 }
+                println!("send identify");
+                let ready_event = match wss_struct.read_stream.lock().await.next().await.expect("Cant fetch case count") {
+                    Ok(value) => {
+                        // println!("value = {:?}",value);
+                        serde_json::from_str(&value.to_string()).unwrap()
+                    },
+                    Err(_) => {
+                        // println!("err = {:?}",err);
+                        Some(Payload {
+                            op:None,
+                            d:None,
+                            s:None,
+                            t:None,
+                        })
+                    },
+                };
+                *wss_struct.ready_event.lock().await = ready_event;
+                let ack_payload = Payload {
+                    op:Some(1),
+                    d:None,
+                    s:None,
+                    t:None,
+                };
+                {
+                    let _ = wss_struct.write_stream.lock().await.send(Message::Text(serde_json::to_string(&ack_payload).unwrap())).await;
+                }
+                tokio::spawn(async move{
+                    send_heartbeat().await;
+                });
+            },
+            // Heartbeat ACK
+            // 当发送心跳成功之后，就会收到该消息
+            11 => {
+
+            },
+            // HTTP Callback ACK
+            // 仅用于 http 回调模式的回包，代表机器人收到了平台推送的数据
+            12 => {
+
             }
-            
+            _ => {
+
+            }
         }
         
-        // println!("close ws_stream");
-        // ws_stream.close(None).await?
-        Ok(())
     }
-    
+    Ok(())
 }
 
-async fn send_heartbeat(ms:u64,ack:u32,mut wss_stream:WebSocketStream<MaybeTlsStream<TcpStream>>){
-    println!("start send_heartbeat function");
-    // let heartbeat_interval = self.heartbeat_interval.clone().unwrap();
-    let ms = std::time::Duration::from_millis(ms);
+async fn send_heartbeat(){
+    // println!("start send_heartbeat function");
+    let wss_struct = GLOBAL_WSS_STRUCT.get().unwrap();
+    let heartbeat_interval;
+    {
+        heartbeat_interval = wss_struct.heartbeat_interval.lock().await.clone().unwrap();
+    }
+    let ms = heartbeat_interval.get("heartbeat_interval").unwrap();
+    // println!("ms = {ms}");
+    let duration = std::time::Duration::from_millis(*ms-200);
     loop {
-        thread::sleep(ms);
-        println!("send heartbeat");
-        if wss_stream.is_terminated(){
-            break;
+        thread::sleep(duration);
+        // println!("send heartbeat");
+        // println!("get d");
+        let d;
+        {
+            d = (*wss_struct.ack.lock().await).unwrap();
         }
+        // println!("d = {d}");
         let ack_payload = Payload {
             op:Some(1),
-            d:Some(json!(ack)),
+            d:Some(d.into()),
             s:None,
             t:None,
         };
-        let _ = wss_stream.send(Message::Text(serde_json::to_string(&ack_payload).unwrap()));
+        // println!("heartbeat ack_payload = {:?}",ack_payload);
+        {
+            let _send_res = wss_struct.write_stream.lock().await.send(Message::Text(serde_json::to_string(&ack_payload).unwrap())).await;
+        }
+        println!("send heartbeat success ack_payload = {:?}",ack_payload);
     }
 }
