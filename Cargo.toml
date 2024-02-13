@@ -14,3 +14,4 @@ serde = { verson = "1.0.193", features = ["derive"] }
 serde_json = { version = "1.0.111" }
 chrono = { version = "0.4.31"}
 futures-util = { version = "0.3.30" }
+rss = { version = "2.0.7" }
