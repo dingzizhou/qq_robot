@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::request_client;
+use crate::{request_client,config};
 use serde::Deserialize;
 use std::sync::OnceLock;
 use chrono::{Utc, DateTime};
@@ -21,8 +21,8 @@ static GLOBAL_ACCESS_TOKEN:OnceLock<AccessToken> = OnceLock::new();
 async fn get_app_access_token() -> Result<QQtoken, Box<dyn std::error::Error>>{
     // println!("get_app_access_token");
     let mut data_map = HashMap::new();
-    data_map.insert("appId","102079646");
-    data_map.insert("clientSecret", "Us1yhCTWLxNZYIp7");
+    data_map.insert("appId",config::QQROBOT_APPID.get().unwrap().as_str());
+    data_map.insert("clientSecret", config::QQROBOT_CLIENTSECRET.get().unwrap().as_str());
     let res = request_client::REQUEST_CLIENT.get().unwrap().post("https://bots.qq.com/app/getAppAccessToken")
                                                                     .json(&data_map)
                                                                     .send()

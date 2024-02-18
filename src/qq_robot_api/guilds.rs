@@ -1,7 +1,7 @@
 
 use serde::Deserialize;
 use std::sync::OnceLock;
-use crate::request_client;
+use crate::{config, request_client};
 
 #[derive(Deserialize,Debug)]
 struct Guild {
@@ -34,7 +34,7 @@ pub async fn get_guilds_list() -> Result<(), Box<dyn std::error::Error>>{
     let token = crate::qq_robot_api::app_access_token::get_global_access_token().await?;
     let res = request_client::REQUEST_CLIENT.get().unwrap().get("https://api.sgroup.qq.com/users/@me/guilds")
                                                                 .header("Authorization",token)
-                                                                .header("X-Union-Appid", "102079646")
+                                                                .header("X-Union-Appid", config::QQROBOT_APPID.get().unwrap().as_str())
                                                                 .send()
                                                                 .await?
                                                                 .json::<Vec<Guild>>()
@@ -53,7 +53,7 @@ pub async fn get_channels_list() -> Result<(), Box<dyn std::error::Error>>{
     println!("{:?}",token);
     let res = request_client::REQUEST_CLIENT.get().unwrap().get("https://api.sgroup.qq.com/guilds/".to_string() + &get_guild_id() + "/channels")
                                                                     .header("Authorization",token)
-                                                                    .header("X-Union-Appid", "102079646")
+                                                                    .header("X-Union-Appid", config::QQROBOT_APPID.get().unwrap().as_str())
                                                                     .send()
                                                                     .await?
                                                                     .text()

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use crate::config;
 use crate::request_client;
 use serde::Deserialize;
 use serde::Serialize;
@@ -64,7 +65,7 @@ pub async fn send_channel_message(content:Option<String>,embed:Option<MessageEmb
     println!("{:?}",token);
     let res = request_client::REQUEST_CLIENT.get().unwrap().post("https://api.sgroup.qq.com/channels/634792030/messages")
                                                                     .header("Authorization",token)
-                                                                    .header("X-Union-Appid", "102079646")
+                                                                    .header("X-Union-Appid", config::QQROBOT_APPID.get().unwrap().as_str())
                                                                     .json(&request_data)
                                                                     .send()
                                                                     .await?

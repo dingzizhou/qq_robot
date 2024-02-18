@@ -1,10 +1,8 @@
-use rss::Channel;
+use rss::{Channel, Item};
 
 use crate::request_client;
 
-
-
-pub async fn get_rss(url:String) -> Result<(), Box<dyn std::error::Error>>{
+pub async fn get_rss() -> Result<Vec<Item>, Box<dyn std::error::Error>>{
 
     let file = std::fs::File::open("MyBangumi.rss").unwrap();
     println!("file = {:?}",file);
@@ -17,7 +15,20 @@ pub async fn get_rss(url:String) -> Result<(), Box<dyn std::error::Error>>{
     //                                                         .await?;
     // let channel = rss::Channel::read_from(&res[..]);
     // println!("channel = {:?}",channel.unwrap());
-    let item = &channel.unwrap().items[0];
-    println!("{:?}",item);
-    Ok(())
+    let item = &channel.unwrap().items;
+    for i in item{
+        println!("{:?}",i.title);
+    }
+    Ok(item.to_vec())
+}
+
+pub async fn download_item() {
+
+}
+
+pub async fn run() {
+    loop {
+        let items = get_rss().await.unwrap();
+        let duration = std::time::Duration::from_millis(1000*60*60*24);
+    }
 }

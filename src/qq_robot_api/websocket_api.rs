@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
-use crate::request_client;
+use crate::{config, request_client};
 
 
 #[derive(Deserialize,Debug)]
@@ -98,7 +98,7 @@ pub async fn init_global_wss_stream() -> Result<bool, Box<dyn std::error::Error>
     let token = crate::qq_robot_api::app_access_token::get_global_access_token().await?;
     let res = request_client::REQUEST_CLIENT.get().unwrap().get("https://sandbox.api.sgroup.qq.com/gateway")
                                                                 .header("Authorization",token)
-                                                                .header("X-Union-Appid", "102079646")
+                                                                .header("X-Union-Appid", config::QQROBOT_APPID.get().unwrap().as_str())
                                                                 .send()
                                                                 .await?
                                                                 .json::<WssUrl>()
@@ -132,12 +132,9 @@ pub async fn init_global_wss_stream() -> Result<bool, Box<dyn std::error::Error>
 // }
 
 pub async fn listen_wss() -> Result<(), Box<dyn std::error::Error>>{
-    let wss_struct = GLOBAL_WSS_STRUCT.get().unwrap().clone();
+    let wss_struct = GLOBAL_WSS_STRUCT.get().unwrap();
     loop {
-        let res = wss_struct.read_stream.lock().await.next().await.expect("Cant fetch case count").unwrap_or_else(|err| {
-            println!("err = {:?}", err);
-            Message::Text("err".to_string())
-        });
+        let res = wss_struct.read_stream.lock().await.next().await.expect("Cant fetch case count").unwrap();
         println!("res = {:?}",res);
         let res_object:Payload = serde_json::from_str(&res.to_string()).unwrap_or_else(|err| {
             println!("err = {:?}", err);
