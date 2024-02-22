@@ -11,7 +11,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>>{
     
     // let listen = qq_robot_api::websocket_api::listen_wss();
 
-    let _ = rss::rss::get_rss().await;
+    // let res = qq_robot_api::guilds::get_channels_list().await;
+    // match res {
+    //     Ok(_) => println!("ok"),
+    //     Err(value) => println!("{:?}",value),
+    // }
+    let _ = rss::rss::run().await;
     // let _res1 = tokio::join!(listen);
     Ok(())
 }
