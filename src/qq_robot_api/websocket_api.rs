@@ -135,7 +135,7 @@ pub async fn listen_wss() -> Result<(), Box<dyn std::error::Error>>{
     let wss_struct = GLOBAL_WSS_STRUCT.get().unwrap();
     loop {
         let res = wss_struct.read_stream.lock().await.next().await.expect("Cant fetch case count").unwrap();
-        println!("res = {:?}",res);
+        // println!("res = {:?}",res);
         let res_object:Payload = serde_json::from_str(&res.to_string()).unwrap_or_else(|err| {
             println!("err = {:?}", err);
             let err_payload = Payload {
@@ -153,7 +153,7 @@ pub async fn listen_wss() -> Result<(), Box<dyn std::error::Error>>{
         match res_object.op.unwrap() {
             // Dispatch 服务端进行消息推送
             0 => {
-                
+                println!("{:?}",res_object.s);
             },
             // Heartbeat 客户端或服务端发送心跳
             1 => {
