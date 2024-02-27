@@ -1,6 +1,7 @@
 use std::{collections::HashMap, thread};
 use std::sync::{Arc, OnceLock};
 
+use chrono::{DateTime, Utc};
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{
     lock::Mutex,
@@ -14,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, tungstenite::Message, MaybeTlsStream, WebSocketStream};
 
-use crate::{config, request_client};
+use crate::{config, qq_robot_api, request_client};
 
 
 #[derive(Deserialize,Debug)]
@@ -55,6 +56,24 @@ struct Payload {
     s:Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     t:Option<String>,
+}
+
+#[derive(Deserialize,Debug,Clone)]
+struct MessageQQBOT{
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    channel_id:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guild_id:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timestamp:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    edited_timestamp:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mention_everyone:Option<bool>,
 }
 
 enum IntentsEnum {
@@ -127,25 +146,19 @@ pub async fn init_global_wss_stream() -> Result<bool, Box<dyn std::error::Error>
     Ok(true)
 }
 
-// pub async fn listen_wss() -> Result<(), Box<dyn std::error::Error>> {
-//     Ok(())
-// }
-
 pub async fn listen_wss() -> Result<(), Box<dyn std::error::Error>>{
     let wss_struct = GLOBAL_WSS_STRUCT.get().unwrap();
     loop {
+        // println!("拉去下一条消息");
         let res = wss_struct.read_stream.lock().await.next().await.expect("Cant fetch case count").unwrap();
-        // println!("res = {:?}",res);
-        let res_object:Payload = serde_json::from_str(&res.to_string()).unwrap_or_else(|err| {
-            println!("err = {:?}", err);
-            let err_payload = Payload {
-                op: Some(6),
-                d: None,
-                s: None,
-                t: None,
-            };
-            err_payload.clone()
-        });
+        println!("res = {:?}",res);
+        let res_object:Payload = match serde_json::from_str(&res.to_string()) {
+            Ok(value) => value,
+            Err(value) => {
+                let _ = qq_robot_api::message::send_channel_message(serde_json::from_str(&value.to_string()).unwrap(), None, None, None, None, None, None, None).await;
+                continue
+            }
+        };
         if res_object.s.is_some() {
             *wss_struct.ack.lock().await = res_object.s;
         }
@@ -153,7 +166,11 @@ pub async fn listen_wss() -> Result<(), Box<dyn std::error::Error>>{
         match res_object.op.unwrap() {
             // Dispatch 服务端进行消息推送
             0 => {
-                println!("{:?}",res_object.s);
+                println!("res_object.s = {:?}",res_object.s);
+                println!("事件内容 = {:?}",res_object.d);
+                let message:MessageQQBOT = serde_json::from_value(res_object.d.unwrap()).unwrap();
+                println!("Message = {:?}",message);
+                println!("事件类型 = {:?}",res_object.t);
             },
             // Heartbeat 客户端或服务端发送心跳
             1 => {
@@ -214,6 +231,7 @@ pub async fn listen_wss() -> Result<(), Box<dyn std::error::Error>>{
                 tokio::spawn(async move{
                     send_heartbeat().await;
                 });
+                println!("成功周期性发送心跳");
             },
             // Heartbeat ACK
             // 当发送心跳成功之后，就会收到该消息

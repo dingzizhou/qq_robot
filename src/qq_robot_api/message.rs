@@ -62,7 +62,7 @@ pub async fn send_channel_message(content:Option<String>,embed:Option<MessageEmb
         None => None,
     };
     let token = crate::qq_robot_api::app_access_token::get_global_access_token().await?;
-    println!("{:?}",token);
+    // println!("{:?}",token);
     let res = request_client::REQUEST_CLIENT.get().unwrap().post("https://api.sgroup.qq.com/channels/634792030/messages")
                                                                     .header("Authorization",token)
                                                                     .header("X-Union-Appid", config::QQROBOT_APPID.get().unwrap().as_str())
@@ -71,7 +71,7 @@ pub async fn send_channel_message(content:Option<String>,embed:Option<MessageEmb
                                                                     .await?
                                                                     .text()
                                                                     .await?;
-    println!("{:?}",res);
+    println!("send message");
     Ok(())
 }
 
