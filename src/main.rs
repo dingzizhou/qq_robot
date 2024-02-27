@@ -4,6 +4,7 @@ mod qq_robot_api;
 mod request_client;
 mod rss;
 mod config;
+mod qbittorrent_api;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>>{
