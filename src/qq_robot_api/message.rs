@@ -25,6 +25,24 @@ pub struct MessageMarkdown {
 
 }
 
+#[derive(Deserialize,Debug,Clone)]
+pub struct MessageQQBOT{
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    channel_id:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    guild_id:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timestamp:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    edited_timestamp:Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mention_everyone:Option<bool>,
+}
+
 pub async fn send_channel_message(content:Option<String>,embed:Option<MessageEmbed>,ark:Option<MessageArk>,message_reference:Option<MessageReference>
                                     ,image:Option<String>,msg_id:Option<String>,event_id:Option<String>,markdown:Option<MessageMarkdown>) -> Result<(), Box<dyn std::error::Error>>{
     let mut request_data = HashMap::new();

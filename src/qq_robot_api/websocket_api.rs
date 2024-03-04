@@ -58,24 +58,6 @@ struct Payload {
     t:Option<String>,
 }
 
-#[derive(Deserialize,Debug,Clone)]
-struct MessageQQBOT{
-    #[serde(skip_serializing_if = "Option::is_none")]
-    id:Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    channel_id:Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    guild_id:Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    content:Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    timestamp:Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    edited_timestamp:Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    mention_everyone:Option<bool>,
-}
-
 enum IntentsEnum {
     GUILDS = 1 << 0,
     GuildMembers = 1 << 1,
@@ -168,7 +150,7 @@ pub async fn listen_wss() -> Result<(), Box<dyn std::error::Error>>{
             0 => {
                 println!("res_object.s = {:?}",res_object.s);
                 println!("事件内容 = {:?}",res_object.d);
-                let message:MessageQQBOT = serde_json::from_value(res_object.d.unwrap()).unwrap();
+                let message:qq_robot_api::message::MessageQQBOT = serde_json::from_value(res_object.d.unwrap()).unwrap();
                 println!("Message = {:?}",message);
                 println!("事件类型 = {:?}",res_object.t);
             },
